@@ -159,7 +159,11 @@ This project includes specific `data-testid` attributes required by the assessme
 
 ## 👥 Contributers
 
-
+<div align="center">
+  <a href="https://github.com/ADITYAVOFFICIAL/BAJAJ-QR1/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=ADITYAVOFFICIAL/BAJAJ-QR1" />
+</a>
+</div>
 
 ## 📝 Notes
 
