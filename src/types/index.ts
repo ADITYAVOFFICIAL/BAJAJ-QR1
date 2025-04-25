@@ -58,27 +58,29 @@ export interface Doctor {
 /**
 * Represents the current state of applied filters and sorting.
 */
+export type SortCriterion = 'fees' | 'experience';
 export interface FilterState {
   searchTerm: string;
   consultationType: 'Video Consult' | 'In Clinic' | null;
-  specialties: Set<string>; // Using Set for efficient add/delete/has checks
-  sortOption: 'fees' | 'experience' | null;
+  specialties: Set<string>;
+  sortOptions: SortCriterion[]; 
 }
 
 /**
 * Return value type for the useDoctorFinder hook, exposing state and handlers.
 */
-export interface UseDoctorFinderReturn extends FilterState {
-  allDoctors: Doctor[]; // All processed doctors from API
-  filteredDoctors: Doctor[]; // Doctors after applying filters and search
-  availableSpecialties: string[]; // Unique specialties from all doctors
-  isLoading: boolean; // API loading state
-  error: string | null; // API error message
-  suggestions: Doctor[]; // Autocomplete suggestions (max 3)
-  setSearchTerm: (term: string) => void; // Update search term (controlled input)
-  setConsultationType: (type: 'Video Consult' | 'In Clinic' | null) => void; // Set consultation filter
-  toggleSpecialty: (specialty: string) => void; // Add/remove specialty filter
-  setSortOption: (option: 'fees' | 'experience' | null) => void; // Set sort option (or toggle off)
-  clearFilters: () => void; // Reset all filters, search, and sort
-  updateSearchTermFromSuggestion: (term: string) => void; // Set search term from suggestion/submit
+export interface UseDoctorFinderReturn extends Omit<FilterState, 'sortOption'> { 
+  sortOptions: SortCriterion[];
+  allDoctors: Doctor[];
+  filteredDoctors: Doctor[];
+  availableSpecialties: string[];
+  isLoading: boolean;
+  error: string | null;
+  suggestions: Doctor[];
+  setSearchTerm: (term: string) => void;
+  setConsultationType: (type: 'Video Consult' | 'In Clinic' | null) => void;
+  toggleSpecialty: (specialty: string) => void;
+  toggleSortOption: (option: SortCriterion) => void; // Renamed for clarity
+  clearFilters: () => void;
+  updateSearchTermFromSuggestion: (term: string) => void;
 }

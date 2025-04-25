@@ -1,8 +1,15 @@
+// src/hooks/useDoctorFinder.ts
+
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Doctor, RawDoctorData, UseDoctorFinderReturn } from '../types';
+import {
+    Doctor,
+    RawDoctorData,
+    UseDoctorFinderReturn,
+    SortCriterion // Import the specific type for sort criteria
+} from '../types';
 
-const API_URL = import.meta.env.VITE_PUBLIC_DOCTOR_API; 
+const API_URL = import.meta.env.VITE_PUBLIC_DOCTOR_API;
 const MAX_SUGGESTIONS = 3;
 
 /**
@@ -34,7 +41,7 @@ function parseExperience(expString: string): number {
 }
 
 /**
- * Custom hook to manage fetching, filtering, sorting, and state synchronization
+ * Custom hook to manage fetching, filtering, multi-sorting, and state synchronization
  * for the doctor listing page.
  * @returns An object containing state variables and handler functions.
  */
@@ -52,8 +59,9 @@ export function useDoctorFinder(): UseDoctorFinderReturn {
   const [selectedSpecialties, setSelectedSpecialties] = useState<Set<string>>(
     () => new Set(searchParams.getAll('specialty')) // getAll handles multiple values
   );
-  const [sortOption, setSortOption] = useState<'fees' | 'experience' | null>(
-    () => (searchParams.get('sort') as 'fees' | 'experience') || null
+  // State for multiple active sort criteria, initialized from URL
+  const [sortOptions, setSortOptions] = useState<SortCriterion[]>(
+    () => searchParams.getAll('sort') as SortCriterion[] // Get all 'sort' params
   );
 
   // Effect to fetch and process data on initial mount
@@ -63,11 +71,11 @@ export function useDoctorFinder(): UseDoctorFinderReturn {
       setError(null);
       try {
         if (!API_URL) {
-          throw new Error("API URL is not defined. Please check your environment variables.");
+          throw new Error("API URL (VITE_PUBLIC_DOCTOR_API) is not defined. Please check your environment variables.");
         }
         const response = await fetch(API_URL);
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          throw new Error(`HTTP error fetching doctor data! status: ${response.status}`);
         }
         const rawData: RawDoctorData[] = await response.json();
 
@@ -76,8 +84,8 @@ export function useDoctorFinder(): UseDoctorFinderReturn {
             const modes: ('Video Consult' | 'In Clinic')[] = [];
             if (rawDoc.video_consult) modes.push('Video Consult');
             if (rawDoc.in_clinic) modes.push('In Clinic');
-  
-            // --- Extract Clinic/Address Data ---
+
+            // Extract Clinic/Address Data including logoUrl
             const clinicName = rawDoc.clinic?.name;
             const address = rawDoc.clinic?.address ? {
                 locality: rawDoc.clinic.address.locality,
@@ -85,31 +93,28 @@ export function useDoctorFinder(): UseDoctorFinderReturn {
                 addressLine1: rawDoc.clinic.address.address_line1,
                 logoUrl: rawDoc.clinic.address.logo_url, // Extract logo URL
             } : undefined;
-            // --- End Extraction ---
-  
+
             return {
               id: rawDoc.id,
               name: rawDoc.name,
-            initials: rawDoc.name_initials,
-            photo: rawDoc.photo,
-            introduction: rawDoc.doctor_introduction,
-            specialityNames: rawDoc.specialities.map(spec => spec.name),
-            parsedFees: parseFee(rawDoc.fees),
-            parsedExperience: parseExperience(rawDoc.experience),
-            consultationModes: modes,
-            video_consult: rawDoc.video_consult,
-            in_clinic: rawDoc.in_clinic,
-            languages: rawDoc.languages,
-            // --- Assign Clinic/Address Data ---
-            clinicName: clinicName,
-            address: address,
-            // --- End Assignment ---
-          };
+              initials: rawDoc.name_initials,
+              photo: rawDoc.photo,
+              introduction: rawDoc.doctor_introduction,
+              specialityNames: rawDoc.specialities.map(spec => spec.name),
+              parsedFees: parseFee(rawDoc.fees),
+              parsedExperience: parseExperience(rawDoc.experience),
+              consultationModes: modes,
+              video_consult: rawDoc.video_consult,
+              in_clinic: rawDoc.in_clinic,
+              languages: rawDoc.languages,
+              clinicName: clinicName,
+              address: address,
+            };
         });
         setAllDoctors(processedDoctors);
       } catch (e) {
         console.error("Failed to fetch or process doctor data:", e);
-        setError(e instanceof Error ? e.message : 'An unknown error occurred');
+        setError(e instanceof Error ? e.message : 'An unknown error occurred while fetching data.');
       } finally {
         setIsLoading(false);
       }
@@ -122,13 +127,13 @@ export function useDoctorFinder(): UseDoctorFinderReturn {
     const params = new URLSearchParams();
     if (searchTerm) params.set('search', searchTerm);
     if (consultationType) params.set('consultation', consultationType);
-    // Append each selected specialty individually
     selectedSpecialties.forEach(spec => params.append('specialty', spec));
-    if (sortOption) params.set('sort', sortOption);
+    // Append each active sort option to the URL
+    sortOptions.forEach(opt => params.append('sort', opt));
 
-    // Use replace: true to avoid polluting browser history on every filter change
+    // Use replace: true to avoid polluting browser history on every filter/sort change
     setSearchParams(params, { replace: true });
-  }, [searchTerm, consultationType, selectedSpecialties, sortOption, setSearchParams]);
+  }, [searchTerm, consultationType, selectedSpecialties, sortOptions, setSearchParams]);
 
   // Memoized calculation of unique available specialties from all doctors
   const availableSpecialties = useMemo(() => {
@@ -139,43 +144,54 @@ export function useDoctorFinder(): UseDoctorFinderReturn {
     return Array.from(specialties).sort(); // Sort alphabetically
   }, [allDoctors]);
 
-  // Memoized calculation of the filtered and sorted list of doctors
+  // Memoized calculation of the filtered and multi-sorted list of doctors
   const filteredDoctors = useMemo(() => {
     let doctors = [...allDoctors]; // Start with a copy of all doctors
 
-    // Apply search term filter (case-insensitive)
+    // --- Apply Filters ---
     if (searchTerm) {
       const lowerSearchTerm = searchTerm.toLowerCase();
       doctors = doctors.filter(doc =>
         doc.name.toLowerCase().includes(lowerSearchTerm)
       );
     }
-
-    // Apply consultation type filter
     if (consultationType) {
       doctors = doctors.filter(doc =>
         doc.consultationModes.includes(consultationType)
       );
     }
-
-    // Apply specialty filters (doctor must have at least one of the selected specialties)
     if (selectedSpecialties.size > 0) {
       doctors = doctors.filter(doc =>
         doc.specialityNames.some(specName => selectedSpecialties.has(specName))
       );
     }
 
-    // Apply sorting
-    if (sortOption === 'fees') {
-      // Ascending order of fees (Infinity sorts last)
-      doctors.sort((a, b) => a.parsedFees - b.parsedFees);
-    } else if (sortOption === 'experience') {
-      // Descending order of experience
-      doctors.sort((a, b) => b.parsedExperience - a.parsedExperience);
+    // --- Apply Multi-level Sorting ---
+    if (sortOptions.length > 0) {
+      doctors.sort((a, b) => {
+        for (const option of sortOptions) {
+          let comparison = 0;
+          if (option === 'fees') {
+            // Ascending order for fees (lower fee comes first)
+            comparison = a.parsedFees - b.parsedFees;
+          } else if (option === 'experience') {
+            // Descending order for experience (higher experience comes first)
+            comparison = b.parsedExperience - a.parsedExperience;
+          }
+
+          // If the comparison result is non-zero, this criterion determines the order
+          if (comparison !== 0) {
+            return comparison;
+          }
+          // If comparison is zero, proceed to the next sort criterion in the array
+        }
+        // If all criteria result in zero comparison, maintain original relative order
+        return 0;
+      });
     }
 
     return doctors;
-  }, [allDoctors, searchTerm, consultationType, selectedSpecialties, sortOption]);
+  }, [allDoctors, searchTerm, consultationType, selectedSpecialties, sortOptions]); // Depend on sortOptions array
 
   // Memoized calculation of autocomplete suggestions
   const suggestions = useMemo(() => {
@@ -187,20 +203,19 @@ export function useDoctorFinder(): UseDoctorFinderReturn {
       .slice(0, MAX_SUGGESTIONS);
   }, [allDoctors, searchTerm]);
 
-  // --- Callback Handlers ---
-  // Use useCallback to ensure stable function references for child components
+  // --- Callback Handlers (Memoized with useCallback) ---
 
-  // Updates search term as user types (controlled input)
+  /** Updates search term state (debounced in Navbar) */
   const handleSetSearchTerm = useCallback((term: string) => {
       setSearchTerm(term);
   }, []);
 
-  // Sets the consultation type filter
+  /** Sets the consultation type filter */
   const handleSetConsultationType = useCallback((type: 'Video Consult' | 'In Clinic' | null) => {
       setConsultationType(type);
   }, []);
 
-  // Toggles a specialty filter on/off
+  /** Toggles a specialty filter on/off */
   const handleToggleSpecialty = useCallback((specialty: string) => {
     setSelectedSpecialties(prev => {
       const newSet = new Set(prev);
@@ -213,27 +228,35 @@ export function useDoctorFinder(): UseDoctorFinderReturn {
     });
   }, []);
 
-  // Sets the sort option. Clicking the same option again toggles it off.
-  const handleSetSortOption = useCallback((option: 'fees' | 'experience' | null) => {
-    setSortOption(prev => (prev === option ? null : option));
+  /** Toggles a sort criterion on/off in the sortOptions array */
+  const handleToggleSortOption = useCallback((option: SortCriterion) => {
+    setSortOptions(prev => {
+      const currentIndex = prev.indexOf(option);
+      if (currentIndex > -1) {
+        // If already present, remove it
+        return prev.filter(item => item !== option);
+      } else {
+        // If not present, add it to the end of the array
+        return [...prev, option];
+      }
+    });
   }, []);
 
-  // Updates the search term definitively (e.g., when selecting a suggestion or pressing Enter)
+  /** Updates the search term definitively (e.g., from suggestion click or Enter) */
   const updateSearchTermFromSuggestion = useCallback((term: string) => {
       setSearchTerm(term);
-      // Optionally clear suggestions list here if needed, though Navbar handles hiding
   }, []);
 
-  // Resets all filters, search term, and sort option to their default states
+  /** Resets all filters, search term, and sort options to their default states */
   const clearFilters = useCallback(() => {
     setSearchTerm('');
     setConsultationType(null);
     setSelectedSpecialties(new Set());
-    setSortOption(null);
-    // URL params will be updated by the useEffect dependency change
+    setSortOptions([]); // Reset sort options to an empty array
   }, []);
 
-  // Return the state and handlers
+  // --- Return Value ---
+  // Expose state and memoized handlers
   return {
     allDoctors,
     filteredDoctors,
@@ -241,16 +264,16 @@ export function useDoctorFinder(): UseDoctorFinderReturn {
     isLoading,
     error,
     suggestions,
-    // Filter State
+    // Filter/Sort State
     searchTerm,
     consultationType,
-    specialties: selectedSpecialties, // Use 'specialties' key consistent with FilterState type
-    sortOption,
+    specialties: selectedSpecialties,
+    sortOptions, // Expose the array of active sort options
     // Handlers
     setSearchTerm: handleSetSearchTerm,
     setConsultationType: handleSetConsultationType,
     toggleSpecialty: handleToggleSpecialty,
-    setSortOption: handleSetSortOption,
+    toggleSortOption: handleToggleSortOption, // Expose the updated sort handler
     clearFilters,
     updateSearchTermFromSuggestion,
   };
