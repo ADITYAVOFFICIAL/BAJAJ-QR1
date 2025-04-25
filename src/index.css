@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+/* Apply custom base styles using standard CSS within the 'base' layer */
+@layer base {
+  body {
+    background-color: theme('colors.gray.100'); /* Equivalent to bg-gray-100 */
+    color: theme('colors.gray.900'); /* Equivalent to text-gray-900 */
+    -webkit-font-smoothing: antialiased; /* Equivalent to antialiased */
+    -moz-osx-font-smoothing: grayscale; /* Equivalent to antialiased */
+  }
+
+  /* Improve focus visibility for keyboard users - using a standard outline */
+  *:focus-visible {
+     outline: 2px solid theme('colors.blue.500'); /* Standard solid outline */
+     outline-offset: 2px; /* Mimics ring-offset-2 */
+     /* Note: Replicating the exact ring shadow effect here is complex.
+        A standard outline is often sufficient for base focus styles. */
+     border-radius: theme('borderRadius.sm'); /* Equivalent to rounded-sm */
+  }
+
+  /* Ensure buttons have a default cursor */
+  button,
+  [role="button"],
+  input[type='submit'],
+  input[type='reset'],
+  input[type='button'] {
+    cursor: pointer; /* Equivalent to cursor-pointer */
+  }
+
+  /* Remove default list styles for suggestion list */
+   ul[role="listbox"] {
+    list-style: none; /* Equivalent to list-none */
+    padding: 0; /* Equivalent to p-0 */
+    margin: 0; /* Equivalent to m-0 */
+  }
+}
+
+/* Ensure scrollbars look consistent (optional, webkit only) */
+/* This is standard CSS and remains unchanged */
+::-webkit-scrollbar {
+  width: 8px; /* Width of the scrollbar */
+  height: 8px; /* Height for horizontal scrollbar */
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1; /* Track color */
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c5c5c5; /* Handle color */
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8; /* Handle color on hover */
+}
